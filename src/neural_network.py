@@ -40,7 +40,9 @@ class MarioNet(nn.Module):
             nn.Flatten(),
             nn.Linear(3136, 3136), # first linear layer will filter the input
             nn.ReLU(),
-            nn.Linear(3136, 1024), # second linear layer will reduce the input to a more narrow set of options
+            nn.Linear(3136, 2048), # second linear layer will reduce the input to a more narrow set of options
+            nn.ReLU(),
+            nn.Linear(2048, 1024),
             nn.ReLU(),
             nn.Linear(1024, 512), # final decisions will be made
             nn.ReLU(),

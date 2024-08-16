@@ -6,10 +6,14 @@ import numpy as np
 from neural_network import MarioNet
 import os
 
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
 
 class Mario:
 
-    def __init__(self, state_dim, action_dim, save_dir, load_model=False):
+    def __init__(self, state_dim, action_dim, save_dir, load_model=False, distributed_training=False):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.save_dir = save_dir
@@ -26,11 +30,15 @@ class Mario:
         else:
             self.net = MarioNet(self.state_dim, self.action_dim).float()
             torch.save(self.net, os.path.join(save_dir, 'model.pth'))
-
-        self.net = self.net.to(device=self.device)
+            
+        if distributed_training:
+            self.net = DDP(self.net, device_ids=[0])
+        else:
+            self.net = self.net.to(device=self.device)
 
         self.exploration_rate = 1
-        self.exploration_rate_decay = 0.99999975
+        # self.exploration_rate_decay = 0.99999975
+        self.exploration_rate_decay = 0.999999975
         self.exploration_rate_min = 0.1
         self.curr_step = 0
 
@@ -144,17 +152,29 @@ class Mario:
         self.net.target.load_state_dict(self.net.online.state_dict())
 
     def save(self):
-        save_path = (
-            self.save_dir /
-            f"mario_net_{int(self.curr_step // self.save_every)}.chkpt"
-        )
+        # save_path = (
+        #     self.save_dir /
+        #     f"mario_net_{int(self.curr_step // self.save_every)}.chkpt"
+        # )
+        i = 0
+        save_path = os.path.join(self.save_dir, f"mario_net_{i}.chkpt")
+        while os.path.exists(save_path):
+            i += 1
+            save_path = os.path.join(self.save_dir, f"mario_net_{i}.chkpt")
+            
 
         torch.save(
             {"online": self.net.online.state_dict(),
              "target": self.net.target.state_dict(),
-             "exploration_rate": self.exploration_rate},
-            save_path,
-        )
+             "exploration_rate": self.exploration_rate,
+             "curr_step": self.curr_step},
+            save_path)
+
+        with open(os.path.join(self.save_dir, 'steps.txt'), 'a') as f:
+            s = f"mario_net_{i}.chkpt steps:{self.curr_step}\n"
+            f.write(s)
+
+
         print(f"MarioNet saved to {save_path} at step {self.curr_step}")
 
     def load(self, load_path):
@@ -165,6 +185,7 @@ class Mario:
         self.net.online.load_state_dict(checkpoint["online"])
         self.net.target.load_state_dict(checkpoint["target"])
         self.exploration_rate = checkpoint["exploration_rate"]
+        self.curr_step = checkpoint["curr_step"]
         print(f'MarioNet loaded from {load_path}')
 
     def learn(self):

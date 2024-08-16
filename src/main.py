@@ -10,7 +10,10 @@ from pathlib import Path
 from gym.wrappers import FrameStack
 from gym.spaces import Box
 import gym
+import random
 import warnings
+import cv2
+import time
 warnings.filterwarnings("ignore")
 
 
@@ -35,73 +38,31 @@ TODO:
 """
 
 
-
-
 def main(args):
-    if gym.__version__ < '0.26':
-        env = gym_super_mario_bros.make(
-            "SuperMarioBros-1-1-v0", new_step_api=True)
-    else:
-        if args.no_gui:
-            env = gym_super_mario_bros.make(
-                "SuperMarioBros-1-1-v0", apply_api_compatibility=True)
-        else:
-            env = gym_super_mario_bros.make(
-                "SuperMarioBros-1-1-v0", render_mode='human', apply_api_compatibility=True)
+    # Create the environment
+    env = setup_environment(args)
 
-    
-    env = JoypadSpace(env, COMPLEX_MOVEMENT)
-
-    env.reset()
-    next_state, reward, done, trunc, info = env.step(action=0)
-    # print(f"{next_state.shape},\n {reward},\n {done},\n {info}")
-
-    env = SkipFrame(env, skip=4)
-    env = GrayScaleObservation(env)
-    env = ResizeObservation(env, shape=84)
-
-    if gym.__version__ < '0.26':
-        env = FrameStack(env, num_stack=4, new_step_api=True)
-    else:
-        env = FrameStack(env, num_stack=4)
-
+    # Check if we can use CUDA
     use_cuda = torch.cuda.is_available()
     print(f"Using CUDA: {use_cuda}")
-    print()
 
-    if args.save_dir is None and args.load_dir is None:
-        if os.name == 'nt':
-            load_dir = f"c:\MarioTraining\{args.name}"
-            save_dir = f"c:\MarioTraining\{args.name}"
-        else:
-            load_dir = f"/tmp/MarioTraining/{args.name}"
-            save_dir = f"/tmp/MarioTraining/{args.name}"
-
-    elif args.save_dir is not None and args.load_dir is not None:
-        save_dir = args.save_dir
-        load_dir = args.load_dir
+    # setup the save and load directories
+    save_dir, load_dir = setup_save_load_dirs(args)
     
-    elif args.save_dir is not None:
-        save_dir = args.save_dir
-        if os.name == 'nt':
-            load_dir = f"c:\MarioTraining\{args.name}"
-        else:
-            load_dir = f"/tmp/MarioTraining/{args.name}"
-
-    elif args.load_dir is not None:
-        load_dir = args.load_dir
-        if os.name == 'nt':
-            save_dir = f"c:\MarioTraining\{args.name}"
-        else:
-            save_dir = f"/tmp/MarioTraining/{args.name}"
+    # TODO: remove the requirement a cast to path object here, remnant of the old code
     save_dir = Path(save_dir)
     print(f"Save directory: {save_dir}   Load directory: {load_dir}")
+
     # check if we are loading a model
     if os.path.exists(load_dir):
-        # we are loading a model
         print(f"Loading model from {load_dir}")
-        # load the checkpoint
-        mario = Mario(state_dim=(4, 84, 84), action_dim=env.action_space.n, save_dir=save_dir, load_model=True)
+
+        # load the model that was saved in the save_dir
+        mario = Mario(state_dim=(4, 84, 84), 
+            action_dim=env.action_space.n, 
+            save_dir=save_dir, 
+            load_model=True)
+        
         # get most recent checkpoint
         files = os.listdir(load_dir)
         checkpoint = None
@@ -114,54 +75,39 @@ def main(args):
                     checkpoint = os.path.join(load_dir, file)
         if checkpoint is None:
             raise ValueError(f"No checkpoint found in {load_dir}")
-        
+
         mario.load(checkpoint)
 
     else:
         # we are not loading a model
         print(f"Creating new model: {args.name}")
         save_dir.mkdir(parents=True)
-        mario = Mario(state_dim=(4, 84, 84), action_dim=env.action_space.n, save_dir=save_dir)
+        mario = Mario(state_dim=(4, 84, 84),
+                      action_dim=env.action_space.n, save_dir=save_dir)
 
         # print the model summary
         print(mario.net)
 
-    # mario = Mario(state_dim=(4, 84, 84),
-    #               action_dim=env.action_space.n, save_dir=save_dir)
+    # TODO: improve the logger, make sure it's not leaking memory and add it back in
+    # logger = MetricLogger(save_dir )
 
-    # # if args.load_dir is not None:
-    # if True:
-    #     # list all folders in models_dir
-    #     files = os.listdir(models_dir)
-    #     for index in range(len(files)):
-    #         files[index] = os.path.join(models_dir, files[index])
-
-    #     # get the latest folder
-    #     latest = max(files, key=os.path.getctime)
-    #     # check if the folder has a checkpoint
-    #     i = 1
-    #     print(os.path.join(latest, f"mario_net_{i}.chkpt"))
-    #     print(os.path.exists(os.path.join(latest, f"mario_net_{i}.chkpt")))
-    #     if os.path.exists(os.path.join(latest, f"mario_net_{i}.chkpt")):
-    #         while os.path.exists(os.path.join(latest, f"mario_net_{i+1}.chkpt")):
-    #             i += 1
-    #         print(
-    #             f"Loading model from {os.path.join(latest, f'mario_net_{i}.chkpt')}")
-    #         exit(0)
-    #         mario.load(os.path.join(latest, f"mario_net_{i}.chkpt"))
-
-
-    logger = MetricLogger(save_dir )
+    if not args.no_gui:
+        # create an opencv window to render the game
+        cv2.startWindowThread()
+        cv2.namedWindow("Super Mario Bros", cv2.WINDOW_NORMAL)
 
     try:
-        episodes = 40000
-        for e in range(episodes):
-
+        e = 0
+        game_results = []
+        while True:
+            # Reset the environment
             state = env.reset()
-
-            # Play the game!
+            # number of steps in the episode, used to reduce the amount of frames rendered
+            i = 0
+            # TODO: remove the times list, it is only used for debugging
+            times = []
+            
             while True:
-
                 # Run agent on the state
                 action = mario.act(state)
 
@@ -169,7 +115,22 @@ def main(args):
                 next_state, reward, done, trunc, info = env.step(action)
 
                 if not args.no_gui:
-                    env.render()
+                    # NOTE: the default render mode 'human' is faster with rendering times of 0.001s vs 0.01s for 'rgb_array'
+                    # but the 'rgb_array' mode allows the game window to stay open after the game is done and does not rename the window
+                    # which is required for streaming the training to twitch
+                    # TODO: remove all the timing code, it is only used for debugging
+                    start_time = time.time()
+                    # env.render()
+                    if i % 2 == 0:
+                        frame = env.render()
+                        cv2.imshow("Super Mario Bros", cv2.cvtColor(
+                            frame, cv2.COLOR_RGB2BGR))
+                        cv2.waitKey(1)
+                    end_time = time.time()
+                    total_time = end_time - start_time
+                    times.append(total_time)
+                    # if i % 100 == 0:
+                    #     print(f"Average render time: {sum(times) / len(times)}")
 
                 # Remember
                 mario.cache(state, next_state, action, reward, done)
@@ -179,7 +140,8 @@ def main(args):
                     q, loss = mario.learn()
 
                 # Logging
-                logger.log_step(reward, loss, q)
+                # TODO: enable the logger
+                # logger.log_step(reward, loss, q)
 
                 # Update state
                 state = next_state
@@ -188,13 +150,18 @@ def main(args):
                 if done or info["flag_get"]:
                     if info["flag_get"]:
                         print("Level clear!")
+                        game_results.append(info["flag_get"])
                     break
+                i += 1
 
-            logger.log_episode()
+            # logger.log_episode()
+            # if (e % 20 == 0) or (e == episodes - 1):
+            if e % 20 == 0:
+                # logger.record(episode=e, epsilon=mario.exploration_rate, step=mario.curr_step)
+                print(
+                    f"Episode: {e}, Step: {mario.curr_step}, Exploration rate: {mario.exploration_rate}")
+            e += 1
 
-            if (e % 20 == 0) or (e == episodes - 1):
-                logger.record(episode=e, epsilon=mario.exploration_rate,
-                            step=mario.curr_step)
 
     except KeyboardInterrupt:
         print("Keyboard interrupt")
@@ -205,15 +172,23 @@ def main(args):
     finally:
         env.close()
 
+
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument("name", help="Name of the model")
-    parser.add_argument("--mode", default="train", type=str, help="train | test")
-    parser.add_argument("--load_dir", default=None, type=str, help="Path to load a model from if not in the default location")
-    parser.add_argument("--save_dir", default=None, type=str, help="Path to save the model if not in the default location")
+    parser.add_argument("--stage", default="1-1", type=str,
+                        help="World to train on Default: 1-1")
+    parser.add_argument("-r", "--randomize_stage",
+                        action='store_true', help="Randomize the stage")
+    parser.add_argument("--mode", default="train",
+                        type=str, help="train | test")
+    parser.add_argument("--load_dir", default=None, type=str,
+                        help="Path to load a model from if not in the default location")
+    parser.add_argument("--save_dir", default=None, type=str,
+                        help="Path to save the model if not in the default location")
     parser.add_argument("--no_gui", action='store_true')
 
     args = parser.parse_args()
