@@ -1,0 +1,10 @@
+torch
+torchvision
+torchaudio
+gym-super-mario-bros
+tensordict
+torchrl
+matplotlib
+tensorboard
+gymnasium[all]
+gymnasium[classic_control]
