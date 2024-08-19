@@ -17,11 +17,6 @@ import time
 warnings.filterwarnings("ignore")
 
 
-# NES Emulator for OpenAI Gym
-
-# Super Mario environment for OpenAI Gym
-
-
 """
 TODO:
 - Name the model
@@ -48,24 +43,22 @@ def main(args):
 
     # setup the save and load directories
     save_dir, load_dir = setup_save_load_dirs(args)
-    
+
     # TODO: remove the requirement a cast to path object here, remnant of the old code
     save_dir = Path(save_dir)
     print(f"Save directory: {save_dir}   Load directory: {load_dir}")
 
-    # check if we are loading a model
-    if os.path.exists(load_dir):
-        print(f"Loading model from {load_dir}")
-
-        # load the model that was saved in the save_dir
-        mario = Mario(state_dim=(4, 84, 84), 
-            action_dim=env.action_space.n, 
-            save_dir=save_dir, 
-            load_model=True)
-        
-        # get most recent checkpoint
-        files = os.listdir(load_dir)
-        checkpoint = None
+    files = os.listdir(load_dir)
+    load_model = False
+    checkpoint = None
+    if len(files) > 0:
+        # if there is a model in the save directory, load it
+        for file in files:
+            if file.endswith(".model"):
+                load_model = True
+                break
+    
+        # if there is a checkpoint in the load directory, load it
         max_checkpoint = 0
         for file in files:
             if file.endswith(".chkpt"):
@@ -73,23 +66,14 @@ def main(args):
                 if i >= max_checkpoint:
                     max_checkpoint = i
                     checkpoint = os.path.join(load_dir, file)
-        if checkpoint is None:
-            raise ValueError(f"No checkpoint found in {load_dir}")
 
+    mario = Mario(state_dim=(4, 84, 84),
+                      action_dim=env.action_space.n,
+                      save_dir=save_dir,
+                      load_model=load_model)
+    
+    if checkpoint is not None:
         mario.load(checkpoint)
-
-    else:
-        # we are not loading a model
-        print(f"Creating new model: {args.name}")
-        save_dir.mkdir(parents=True)
-        mario = Mario(state_dim=(4, 84, 84),
-                      action_dim=env.action_space.n, save_dir=save_dir)
-
-        # print the model summary
-        print(mario.net)
-
-    # TODO: improve the logger, make sure it's not leaking memory and add it back in
-    # logger = MetricLogger(save_dir )
 
     if not args.no_gui:
         # create an opencv window to render the game
@@ -106,7 +90,7 @@ def main(args):
             i = 0
             # TODO: remove the times list, it is only used for debugging
             times = []
-            
+
             while True:
                 # Run agent on the state
                 action = mario.act(state)
@@ -161,7 +145,6 @@ def main(args):
                 print(
                     f"Episode: {e}, Step: {mario.curr_step}, Exploration rate: {mario.exploration_rate}")
             e += 1
-
 
     except KeyboardInterrupt:
         print("Keyboard interrupt")

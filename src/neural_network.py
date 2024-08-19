@@ -1,5 +1,6 @@
 from torch import nn
 
+
 class MarioNet(nn.Module):
     """mini CNN structure
   input -> (conv2d + relu) x 3 -> flatten -> (dense + relu) x 2 -> output
@@ -33,19 +34,21 @@ class MarioNet(nn.Module):
         return nn.Sequential(
             nn.Conv2d(in_channels=c, out_channels=32, kernel_size=8, stride=4),
             nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
+            nn.Conv2d(in_channels=32, out_channels=64,
+                      kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
+            nn.Conv2d(in_channels=64, out_channels=64,
+                      kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(3136, 3136), # first linear layer will filter the input
+            nn.Linear(3136, 3136),  # first linear layer will filter the input
             nn.ReLU(),
-            nn.Linear(3136, 2048), # second linear layer will reduce the input to a more narrow set of options
+            # second linear layer will reduce the input to a more narrow set of options
+            nn.Linear(3136, 2048),
             nn.ReLU(),
             nn.Linear(2048, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 512), # final decisions will be made
+            nn.Linear(1024, 512),  # final decisions will be made
             nn.ReLU(),
-            nn.Linear(512, output_dim), # output final decision
+            nn.Linear(512, output_dim),  # output final decision
         )
-

@@ -9,17 +9,21 @@ from nes_py.wrappers import JoypadSpace
 from gym.wrappers import FrameStack
 import os
 
+
 def setup_environment(args):
     if gym.__version__ < '0.26':
         env = gym_super_mario_bros.make(
             f"SuperMarioBros-{args.world}-v0", new_step_api=True)
     else:
+        stages = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-2', '2-3', '2-4', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3',
+                    '4-4', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3', '6-4', '7-1', '7-2', '7-3', '7-4', '8-1', '8-2', '8-3', '8-4']
         if args.no_gui:
+            # env = gym_super_mario_bros.make(
+            #     f"SuperMarioBros-{args.world}-v0", apply_api_compatibility=True)
             env = gym_super_mario_bros.make(
-                f"SuperMarioBros-{args.world}-v0", apply_api_compatibility=True)
+                f"SuperMarioBrosRandomStages-v0", stages=stages, apply_api_compatibility=True)
+            
         else:
-            stages = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-2', '2-3', '2-4', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3',
-                      '4-4', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3', '6-4', '7-1', '7-2', '7-3', '7-4', '8-1', '8-2', '8-3', '8-4']
             # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='human', apply_api_compatibility=True)
             # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='rgb_array', apply_api_compatibility=True)
             # env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=['1-1', '1-2', '1-3', '1-4'], render_mode='rgb_array', apply_api_compatibility=True)
@@ -28,7 +32,7 @@ def setup_environment(args):
 
     env = JoypadSpace(env, COMPLEX_MOVEMENT)
     env.reset()
-    next_state, reward, done, trunc, info = env.step(action=0)
+    # next_state, reward, done, trunc, info = env.step(action=0)
     # print(f"{next_state.shape},\n {reward},\n {done},\n {info}")
 
     env = SkipFrame(env, skip=4)
@@ -40,6 +44,7 @@ def setup_environment(args):
     else:
         env = FrameStack(env, num_stack=4)
     return env
+
 
 def setup_save_load_dirs(args):
     if args.save_dir is None and args.load_dir is None:
@@ -75,6 +80,7 @@ def setup_save_load_dirs(args):
 
     return save_dir, load_dir
 
+
 class SkipFrame(gym.Wrapper):
     def __init__(self, env, skip):
         """Return only every `skip`-th frame"""
@@ -98,7 +104,8 @@ class GrayScaleObservation(gym.ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
         obs_shape = self.observation_space.shape[:2]
-        self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+        self.observation_space = Box(
+            low=0, high=255, shape=obs_shape, dtype=np.uint8)
 
     def permute_orientation(self, observation):
         # permute [H, W, C] array to [C, H, W] tensor
@@ -122,7 +129,8 @@ class ResizeObservation(gym.ObservationWrapper):
             self.shape = tuple(shape)
 
         obs_shape = self.shape + self.observation_space.shape[2:]
-        self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+        self.observation_space = Box(
+            low=0, high=255, shape=obs_shape, dtype=np.uint8)
 
     def observation(self, observation):
         transforms = T.Compose(

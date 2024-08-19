@@ -11,6 +11,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
+
 class Mario:
 
     def __init__(self, state_dim, action_dim, save_dir, load_model=False, distributed_training=False):
@@ -26,11 +27,11 @@ class Mario:
         since the last time it wa
         """
         if load_model:
-            self.net = torch.load(os.path.join(save_dir, 'model.pth'))
+            self.net = torch.load(os.path.join(save_dir, 'model.mdl'))
         else:
             self.net = MarioNet(self.state_dim, self.action_dim).float()
-            torch.save(self.net, os.path.join(save_dir, 'model.pth'))
-            
+            torch.save(self.net, os.path.join(save_dir, 'model.mdl'))
+
         if distributed_training:
             self.net = DDP(self.net, device_ids=[0])
         else:
@@ -161,7 +162,6 @@ class Mario:
         while os.path.exists(save_path):
             i += 1
             save_path = os.path.join(self.save_dir, f"mario_net_{i}.chkpt")
-            
 
         torch.save(
             {"online": self.net.online.state_dict(),
@@ -173,7 +173,6 @@ class Mario:
         with open(os.path.join(self.save_dir, 'steps.txt'), 'a') as f:
             s = f"mario_net_{i}.chkpt steps:{self.curr_step}\n"
             f.write(s)
-
 
         print(f"MarioNet saved to {save_path} at step {self.curr_step}")
 
