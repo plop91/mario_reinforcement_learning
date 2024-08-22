@@ -1,34 +1,34 @@
 import gym
 from gym.spaces import Box
+from gym.wrappers import FrameStack
+
+# import gymnasium as gym
+# from gymnasium.spaces import Box
+# from gymnasium.wrappers import FrameStack
+
 import numpy as np
+
 import torch
 from torchvision import transforms as T
+
 from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
 import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
-from gym.wrappers import FrameStack
+# JoypadSpace.reset = lambda self, **kwargs: self.env.reset(**kwargs)
+
 import os
 
 
 def setup_environment(args):
-    if gym.__version__ < '0.26':
-        env = gym_super_mario_bros.make(
-            f"SuperMarioBros-{args.world}-v0", new_step_api=True)
-    else:
-        stages = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-2', '2-3', '2-4', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3',
-                    '4-4', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3', '6-4', '7-1', '7-2', '7-3', '7-4', '8-1', '8-2', '8-3', '8-4']
-        if args.no_gui:
-            # env = gym_super_mario_bros.make(
-            #     f"SuperMarioBros-{args.world}-v0", apply_api_compatibility=True)
-            env = gym_super_mario_bros.make(
-                f"SuperMarioBrosRandomStages-v0", stages=stages, apply_api_compatibility=True)
-            
-        else:
-            # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='human', apply_api_compatibility=True)
-            # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='rgb_array', apply_api_compatibility=True)
-            # env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=['1-1', '1-2', '1-3', '1-4'], render_mode='rgb_array', apply_api_compatibility=True)
-            env = gym_super_mario_bros.make(
-                f"SuperMarioBrosRandomStages-v0", stages=stages, render_mode='rgb_array', apply_api_compatibility=True)
+    stages = ['1-1']
+    # stages = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-3', '2-4', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3',
+    #             '4-4', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3', '6-4', '7-1', '7-3', '7-4', '8-1', '8-2', '8-3', '8-4'] # all stages minus the water levels
+    
+    # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='human', apply_api_compatibility=True)
+    # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='rgb_array', apply_api_compatibility=True)
+    # env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=['1-1', '1-2', '1-3', '1-4'], render_mode='rgb_array', apply_api_compatibility=True)
+    env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=stages, render_mode='rgb_array', apply_api_compatibility=True)
+    # env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=stages)
 
     env = JoypadSpace(env, COMPLEX_MOVEMENT)
     env.reset()
@@ -38,11 +38,7 @@ def setup_environment(args):
     env = SkipFrame(env, skip=4)
     env = GrayScaleObservation(env)
     env = ResizeObservation(env, shape=84)
-
-    if gym.__version__ < '0.26':
-        env = FrameStack(env, num_stack=4, new_step_api=True)
-    else:
-        env = FrameStack(env, num_stack=4)
+    env = FrameStack(env, num_stack=4)
     return env
 
 

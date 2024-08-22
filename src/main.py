@@ -1,16 +1,17 @@
 import os
-import datetime
+# import datetime
 from logger import MetricLogger
 from mario import Mario
 from utils import *
 from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
-import gym_super_mario_bros
-from nes_py.wrappers import JoypadSpace
+# import gym_super_mario_bros
+# from nes_py.wrappers import JoypadSpace
 from pathlib import Path
-from gym.wrappers import FrameStack
-from gym.spaces import Box
-import gym
-import random
+# from gym.wrappers import FrameStack
+# from gym.spaces import Box
+# import gym
+# import gymnasium as gym
+# import random
 import warnings
 import cv2
 import time
@@ -30,6 +31,11 @@ TODO:
 - when a model beats the game multiple times in a row, save it and move on to the next level
 - add 'training' file to the save directory that contains information about the training
 
+TODO: Training regime
+- Train on a single level until the model beats the level 50% of the time over the last 10 episodes, reset the exploration rate
+- Train on all levels in world 1 until the model beats each level 50% of the time over the last 20 episodes, reset the exploration rate
+- Train on all levels in world 1 and 2 until the model beats each level 50% of the time over the last 20 episodes, reset the exploration rate
+- Train on all levels in the game(minus water levels) until the model beats each level 50% of the time over the last 20 episodes
 """
 
 
@@ -83,6 +89,7 @@ def main(args):
     try:
         e = 0
         game_results = []
+        rewards = []
         while True:
             # Reset the environment
             state = env.reset()
@@ -137,13 +144,13 @@ def main(args):
                         game_results.append(info["flag_get"])
                     break
                 i += 1
-
+            rewards.append(reward)
             # logger.log_episode()
             # if (e % 20 == 0) or (e == episodes - 1):
             if e % 20 == 0:
                 # logger.record(episode=e, epsilon=mario.exploration_rate, step=mario.curr_step)
-                print(
-                    f"Episode: {e}, Step: {mario.curr_step}, Exploration rate: {mario.exploration_rate}")
+                print(f"Episode: {e}, Step: {mario.curr_step}, Exploration rate: {mario.exploration_rate}, Average Reward: {sum(rewards) / len(rewards)}")
+                rewards = []
             e += 1
 
     except KeyboardInterrupt:
