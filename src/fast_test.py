@@ -1,4 +1,4 @@
-from ctypes import cdll
+import ctypes
 import subprocess
 import os
 
@@ -7,23 +7,21 @@ if not os.path.exists('./libneat.so'):
         subprocess.run(['make'])
     else:
         raise Exception('Makefile not found')
-lib = cdll.LoadLibrary('./libneat.so')
+lib = ctypes.cdll.LoadLibrary('./libneat.so')
 print(lib)
 
 
-class Foo(object):
+lib.NewGenome.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
+lib.NewGenome.restype = ctypes.c_void_p
 
-    def __init__(self):
-        self.node = lib.NewNode(0,10)
-        print(self.node)
-        self.genome = lib.NewGenome(3,2,3)
-        print(self.genome)
-
-    def test(self):
-        print(lib.NodeGetId(self.node))
-        print(lib.NodeGetValue(self.node))
-        # print(self.genome)
+lib.GenomeLoadRunTestCase.argtypes = [ctypes.c_void_p]
+lib.GenomeLoadRunTestCase.restype = ctypes.c_void_p
 
 
-f = Foo()
-f.test()
+g = lib.NewGenome(3, 3, 2)
+lib.GenomeLoadRunTestCase(g)
+
+if os.path.exists('./libneat.so'):
+    os.remove('./libneat.so')
+if os.path.exists('./neat.o'):
+    os.remove('./neat.o')

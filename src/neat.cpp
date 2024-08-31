@@ -61,6 +61,7 @@ elitism            = 2
 survival_threshold = 0.2
 */
 
+
 class Node
 {
     // private:
@@ -68,8 +69,6 @@ public:
     int id;
     float value;
     // float bias;
-    // float *weights;
-    // int *connections;
     list<tuple<Node *, float, bool>> *connections; // tuple<from_node, weight>
     bool ready;
 
@@ -101,7 +100,7 @@ Node::Node(int id, float value)
 
 Node::~Node()
 {
-    cout << "Node destroyed!";
+    delete connections;
 }
 
 void Node::AddConnection(Node *node, float weight)
@@ -179,11 +178,9 @@ public:
     void InitGenome();
     void FeedForward(float *input_image);
     void Mutate();
+    void LoadTestCase();
 
     // DEBUG
-    // void AddNode(Node *node) { nodes[0] = node; }
-    // void AddBias(Node *node) { bias = node; }
-    // void AddConnection(Node *from, Node *to, float weight) { to->AddConnection(from, weight); }
     void LoadConfig(int numNodes, Node **nodes, int numInputs, Node **inputs, int numOutputs, Node **outputs, int numHidden, Node **hidden)
     {
         this->numNodes = numNodes;
@@ -237,7 +234,7 @@ void Genome::FeedForward(float *input_image)
 {
     for (int i = 0; i < numInputs; i++)
     {
-        inputs[i]->SetValue(input_image[i]);
+        this->inputs[i]->SetValue(input_image[i]);
     }
     for (int i = 0; i < numOutputs; i++)
     {
@@ -245,29 +242,95 @@ void Genome::FeedForward(float *input_image)
     }
 }
 
+void Genome::LoadTestCase()
+{
+    cout << "Loading genome test case!" << endl;
+    // vars
+    int numInputs = 3;
+    int numHidden = 2;
+    int numOutputs = 3;
+    int numNodes = numInputs + numHidden + numOutputs;
+    Genome *genome = new Genome(numInputs, numHidden, numOutputs);
+
+    // Nodes
+    Node *node0 = new Node(1, 0);
+    Node *node1 = new Node(2, 1);
+    Node *node2 = new Node(3, 0.25);
+    Node *node3 = new Node(4, -INFINITY);
+    Node *node4 = new Node(5, -INFINITY);
+    Node *node5 = new Node(6, -INFINITY);
+    Node *node6 = new Node(7, -INFINITY);
+    Node *node7 = new Node(8, -INFINITY);
+
+    // Node lists
+    Node **nodes = new Node *[8]{node0, node1, node2, node3, node4, node5, node6, node7};
+    Node **inputs = new Node *[3]{node0, node1, node2};
+    Node **hidden = new Node *[2]{node3, node4};
+    Node **outputs = new Node *[3]{node5, node6, node7};
+
+    // Connections
+    node3->AddConnection(node0, 0.5);
+    node3->AddConnection(node1, 0.25);
+
+    node4->AddConnection(node3, 2.0);
+    node4->AddConnection(node2, 1.0);
+
+    node5->AddConnection(node3, 1.0);
+
+    node6->AddConnection(node3, 0.5);
+
+    node7->AddConnection(node4, 0.1);
+    
+    // Load config
+    this->LoadConfig(numNodes, nodes, numInputs, inputs, numOutputs, outputs, numHidden, hidden);
+
+    // print initial state
+    cout << "Initial state:" << endl;
+    for (int i = 0; i < numNodes; i++)
+    {
+        cout << i << ":" << nodes[i]->GetValue() << endl;
+    }
+
+    // feed forward
+    this->FeedForward(new float[3]{0, 1, 0.25});
+
+    // print state after feed forward
+    cout << "State after feed forward:" << endl;
+    for (int i = 0; i < numNodes; i++)
+    {
+        cout << i << ":" << nodes[i]->GetValue() << endl;
+    }
+}
+
+
 extern "C"
 {
-    Node *NewNode(int id, float value)
-    {
-        return new Node(id, value);
-    }
-    int NodeGetId(Node *node)
-    {
-        return node->GetId();
-        // return 0;
-    }
-    float NodeGetValue(Node *node)
-    {
-        // return node->GetValue();
-        return 0;
-    }
-    void NodeAddConnection(Node *node, Node *to, float weight)
-    {
-        node->AddConnection(to, weight);
-    }
+    // Node *NewNode(int id, float value)
+    // {
+    //     return new Node(id, value);
+    // }
+    // int NodeGetId(Node *node)
+    // {
+    //     return node->GetId();
+    //     // return 0;
+    // }
+    // float NodeGetValue(Node *node)
+    // {
+    //     return node->GetValue();
+    // }
+    // void NodeAddConnection(Node *node, Node *to, float weight)
+    // {
+    //     node->AddConnection(to, weight);
+    // }
     Genome *NewGenome(int numInputs, int numOutputs, int numHidden)
     {
         return new Genome(numInputs, numOutputs, numHidden);
+    }
+
+    void GenomeLoadRunTestCase(Genome *genome)
+    {
+        genome->LoadTestCase();
+        // return genome->getOutput();
     }
 }
 
