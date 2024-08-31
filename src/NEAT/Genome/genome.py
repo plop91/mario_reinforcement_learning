@@ -65,6 +65,9 @@ class Genome:
     def __init__(self, name):
         self.genome = self.lib.NewGenome(name.encode('utf-8'))
 
+    def __del__(self):
+        self.lib.DeleteGenome(self.genome)
+
     def new_genome(self, num_inputs, num_outputs):
         self.lib.InitGenome(self.genome, num_inputs, num_outputs)
 
@@ -108,7 +111,13 @@ if __name__ == '__main__':
     from nes_py.wrappers import JoypadSpace
     import gym_super_mario_bros
     from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
-    from utils import *
+    try:
+        from utils import *
+    except ImportError:
+        # add ../.. to sys.path
+        import sys
+        sys.path.append('../..')
+        from utils import *
     import warnings
     warnings.filterwarnings("ignore")
 

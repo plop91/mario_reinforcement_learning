@@ -16,18 +16,60 @@ import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
 # JoypadSpace.reset = lambda self, **kwargs: self.env.reset(**kwargs)
 
+import cv2
+
 import os
 
 
+def write_on_img(img, text, pos, font_scale=1, thickness=1, font=cv2.FONT_HERSHEY_SIMPLEX, color=(0, 0, 255), line_type=cv2.LINE_4):
+    cv2.putText(img, text, (pos[0]+1, pos[1]+1), font, font_scale,
+                (0, 0, 0), thickness, line_type)
+    cv2.putText(img, text, pos, font, font_scale,
+                color, thickness, line_type)
+    return img
+
+
+def write_stats_on_img(frame, name, e, i, reward):
+
+    frame = write_on_img(frame,
+                         f"Model's Name:{name}",
+                         pos=(10, 50),
+                         font=cv2.FONT_HERSHEY_TRIPLEX,
+                         font_scale=.45,
+                         color=(0, 150, 255),
+                         thickness=1,
+                         line_type=cv2.LINE_4)
+    frame = write_on_img(frame,
+                         f"Episode:{e} Step:{i}",
+                         pos=(10, 70),
+                         font=cv2.FONT_HERSHEY_TRIPLEX,
+                         font_scale=.45,
+                         color=(0, 150, 255),
+                         thickness=1,
+                         line_type=cv2.LINE_4)
+    frame = write_on_img(frame,
+                         f"Reward:{reward}",
+                         pos=(10, 90),
+                         font=cv2.FONT_HERSHEY_TRIPLEX,
+                         font_scale=.45,
+                         color=(0, 150, 255),
+                         thickness=1,
+                         line_type=cv2.LINE_4)
+
+    return frame
+
+
 def setup_environment(args):
-    stages = ['1-1']
-    # stages = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-3', '2-4', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3',
-    #             '4-4', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3', '6-4', '7-1', '7-3', '7-4', '8-1', '8-2', '8-3', '8-4'] # all stages minus the water levels
-    
+
+    regimes = [['1-1'], ['1-1', '1-2', '1-3', '1-4'], ['1-1', '1-2', '1-3', '1-4', '2-1', '2-3', '2-4'],
+               ['1-1', '1-2', '1-3', '1-4', '2-1', '2-3', '2-4', '3-1', '3-2', '3-3', '3-4', '4-1', '4-2', '4-3',
+                '4-4', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3', '6-4', '7-1', '7-3', '7-4', '8-1', '8-2', '8-3', '8-4']]  # all stages minus the water levels
+
     # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='human', apply_api_compatibility=True)
     # env = gym_super_mario_bros.make(f"SuperMarioBros-{args.world}-v0", render_mode='rgb_array', apply_api_compatibility=True)
     # env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=['1-1', '1-2', '1-3', '1-4'], render_mode='rgb_array', apply_api_compatibility=True)
-    env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=stages, render_mode='rgb_array', apply_api_compatibility=True)
+    env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0",
+                                    stages=regimes[args.regime], render_mode='rgb_array', apply_api_compatibility=True)
     # env = gym_super_mario_bros.make(f"SuperMarioBrosRandomStages-v0", stages=stages)
 
     env = JoypadSpace(env, COMPLEX_MOVEMENT)
@@ -40,41 +82,6 @@ def setup_environment(args):
     env = ResizeObservation(env, shape=84)
     env = FrameStack(env, num_stack=4)
     return env
-
-
-def setup_save_load_dirs(args):
-    if args.save_dir is None and args.load_dir is None:
-        if os.name == 'nt':
-            load_dir = f"c:\\MarioTraining\\{args.name}"
-            save_dir = f"c:\\MarioTraining\\{args.name}"
-        else:
-            load_dir = f"/tmp/MarioTraining/{args.name}"
-            save_dir = f"/tmp/MarioTraining/{args.name}"
-
-    elif args.save_dir is not None and args.load_dir is not None:
-        save_dir = args.save_dir
-        load_dir = args.load_dir
-
-    elif args.save_dir is not None:
-        save_dir = args.save_dir
-        if os.name == 'nt':
-            load_dir = f"c:\\MarioTraining\\{args.name}"
-        else:
-            load_dir = f"/tmp/MarioTraining/{args.name}"
-
-    elif args.load_dir is not None:
-        load_dir = args.load_dir
-        if os.name == 'nt':
-            save_dir = f"c:\\MarioTraining\\{args.name}"
-        else:
-            save_dir = f"/tmp/MarioTraining/{args.name}"
-
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    if not os.path.exists(load_dir):
-        os.makedirs(load_dir)
-
-    return save_dir, load_dir
 
 
 class SkipFrame(gym.Wrapper):

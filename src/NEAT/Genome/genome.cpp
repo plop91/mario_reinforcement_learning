@@ -178,6 +178,7 @@ private:
 public:
     Genome(char *name);
     ~Genome();
+    Genome(Genome *other);
     void InitGenome(int numInputs, int numOutputs);
     void Load(const char *filename);
     void Save(const char *filename);
@@ -208,6 +209,25 @@ Genome::Genome(char *name)
 Genome::~Genome()
 {
     cout << "Genome destroyed!";
+}
+
+Genome::Genome(Genome *other)
+{
+    this->name = new char[strlen(other->name) + 1];
+    strcpy(this->name, other->name);
+    this->fitness = 0;
+    this->numNodes = other->numNodes;
+    this->numInputs = other->numInputs;
+    this->numOutputs = other->numOutputs;
+    this->numHidden = other->numHidden;
+    // TODO: need to copy nodes, bias, inputs, outputs, and hidden but preserver the connections between the new nodes
+    // this->nodes = other->nodes;
+    // this->bias = other->bias;
+    // this->inputs = other->inputs;
+    // this->outputs = other->outputs;
+    // this->hidden = other->hidden;
+    neg_norm_distribution = normal_distribution<float>(-1.0, 1.0);
+    pos_norm_distribution = normal_distribution<float>(0.0, 1.0);
 }
 
 void Genome::InitGenome(int numInputs, int numOutputs)
@@ -465,6 +485,14 @@ extern "C"
     Genome *NewGenome(char *name)
     {
         return new Genome(name);
+    }
+    void DeleteGenome(Genome *genome)
+    {
+        delete genome;
+    }
+    Genome *CopyGenome(Genome *genome)
+    {
+        return genome;
     }
     void InitGenome(Genome *genome, int numInputs, int numOutputs)
     {
