@@ -4,8 +4,67 @@
 #include <list>
 using namespace std;
 
+/*
+Examples of configuration settings from:
+https://github.com/CodeReclaimers/neat-python/blob/master/examples/circuits/config
+
+[NEAT]
+fitness_criterion     = max     # unknown
+fitness_threshold     = -0.01   # unknown
+pop_size              = 500     # population size
+reset_on_extinction   = False   # if True, reset all species if all species are extinct
+
+[CircuitGenome]
+# component type options
+component_default      = resistor           # unknown
+component_mutate_rate  = 0.1                # unknown
+component_options      = resistor diode     # unknown
+
+# component value options
+value_init_mean          = 4.5      # unknown
+value_init_stdev         = 0.5      # unknown
+value_max_value          = 6.0      # unknown
+value_min_value          = 3.0      # unknown
+value_mutate_power       = 0.1      # unknown
+value_mutate_rate        = 0.8      # unknown
+value_replace_rate       = 0.1      # unknown
+
+# genome compatibility options
+compatibility_disjoint_coefficient = 1.0    # unknown
+compatibility_weight_coefficient   = 1.0    # unknown
+
+# connection add/remove rates
+conn_add_prob           = 0.2   # probability of adding a connection
+conn_delete_prob        = 0.2   # probability of deleting a connection
+
+# connection enable options
+enabled_default         = True  # probability of a connection being enabled/disabled
+enabled_mutate_rate     = 0.02  # probability of a connection being enabled/disabled
+
+# node add/remove rates
+node_add_prob           = 0.1   # probability of adding a node
+node_delete_prob        = 0.1   # probability of deleting a node
+
+# network parameters
+num_inputs              = 3  # number of input nodes
+num_outputs             = 1 # number of output nodes
+
+[DefaultSpeciesSet]
+compatibility_threshold = 2.0   # some threshold for compatibility between species, not sure if I'll use this
+
+[DefaultStagnation]
+species_fitness_func = max
+max_stagnation       = 15
+
+[DefaultReproduction]
+elitism            = 2
+survival_threshold = 0.2
+*/
+
 class Node
 {
+    // private:
+public:
     int id;
     float value;
     // float bias;
@@ -14,7 +73,7 @@ class Node
     list<tuple<Node *, float, bool>> *connections; // tuple<from_node, weight>
     bool ready;
 
-public:
+// public:
     Node(int id, float value);
     ~Node();
     void CalculateValue();
@@ -24,6 +83,7 @@ public:
         this->value = value;
         this->ready = true;
     }
+    int GetId() { return id; }
     float GetValue() { return value; }
     void IsReady() { ready = true; }
     void Reset();
@@ -33,7 +93,6 @@ public:
 
 Node::Node(int id, float value)
 {
-    cout << "Node created!" << endl;
     this->id = id;
     this->value = value;
     ready = false;
@@ -52,7 +111,6 @@ void Node::AddConnection(Node *node, float weight)
 
 void Node::CalculateValue()
 {
-    cout << "Calculating value for node " << id << endl;
     // Check if node has any incoming connections, if not, set ready to true and do not update value
     if (connections->empty())
     {
@@ -70,7 +128,7 @@ void Node::CalculateValue()
             break;
         }
     }
-    
+
     // If all incoming connections are disabled, set ready to true and do not update value
     if (all_connections_disabled)
     {
@@ -82,11 +140,14 @@ void Node::CalculateValue()
     value = 0;
     for (tuple<Node *, float, bool> conn : *connections)
     {
-        if (!get<0>(conn)->ready)
+        if (get<2>(conn))
         {
-            get<0>(conn)->CalculateValue();
+            if (!get<0>(conn)->ready)
+            {
+                get<0>(conn)->CalculateValue();
+            }
+            value += get<0>(conn)->value * get<1>(conn);
         }
-        value += get<0>(conn)->value * get<1>(conn);
     }
     ready = true;
 }
@@ -123,7 +184,7 @@ public:
     // void AddNode(Node *node) { nodes[0] = node; }
     // void AddBias(Node *node) { bias = node; }
     // void AddConnection(Node *from, Node *to, float weight) { to->AddConnection(from, weight); }
-    void LoadConfig(int numNodes, Node **nodes, int numInputs, Node **inputs,  int numOutputs, Node **outputs, int numHidden, Node **hidden)
+    void LoadConfig(int numNodes, Node **nodes, int numInputs, Node **inputs, int numOutputs, Node **outputs, int numHidden, Node **hidden)
     {
         this->numNodes = numNodes;
         this->numInputs = numInputs;
@@ -139,7 +200,6 @@ public:
 
 Genome::Genome(int numInputs, int numOutputs, int numHidden)
 {
-    cout << "Genome created!";
     distribution = normal_distribution<float>(-1.0, 1.0);
 }
 
@@ -179,19 +239,37 @@ void Genome::FeedForward(float *input_image)
     {
         inputs[i]->SetValue(input_image[i]);
     }
-    cout << "NumOutputs at FF: " << numOutputs << endl;
     for (int i = 0; i < numOutputs; i++)
     {
         outputs[i]->CalculateValue();
     }
 }
 
-class Neat
+extern "C"
 {
-public:
-    Neat();
-    ~Neat();
-};
+    Node *NewNode(int id, float value)
+    {
+        return new Node(id, value);
+    }
+    int NodeGetId(Node *node)
+    {
+        return node->GetId();
+        // return 0;
+    }
+    float NodeGetValue(Node *node)
+    {
+        // return node->GetValue();
+        return 0;
+    }
+    void NodeAddConnection(Node *node, Node *to, float weight)
+    {
+        node->AddConnection(to, weight);
+    }
+    Genome *NewGenome(int numInputs, int numOutputs, int numHidden)
+    {
+        return new Genome(numInputs, numOutputs, numHidden);
+    }
+}
 
 int main()
 {
@@ -238,7 +316,19 @@ int main()
 
     // Load config
     genome->LoadConfig(numNodes, nodes, numInputs, inputs, numOutputs, outputs, numHidden, hidden);
+
+    // print state before feed forward
+    cout << "Initial state:" << endl;
+    for (int i = 0; i < numNodes; i++)
+    {
+        cout << i << ":" << nodes[i]->GetValue() << endl;
+    }
+
+    // feed forward
     genome->FeedForward(new float[3]{0, 1, 0.25});
+
+    // print state after feed forward
+    cout << "State after feed forward:" << endl;
     for (int i = 0; i < numNodes; i++)
     {
         cout << i << ":" << nodes[i]->GetValue() << endl;
