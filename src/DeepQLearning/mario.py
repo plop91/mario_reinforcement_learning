@@ -14,10 +14,10 @@ from torch.distributed import init_process_group, destroy_process_group
 
 class Mario:
 
-    def __init__(self, state_dim, action_dim, save_dir, load_model=False, distributed_training=False):
+    def __init__(self, state_dim, action_dim, dir_name, distributed_training=False):
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.save_dir = save_dir
+        self.dir_name = dir_name
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -26,11 +26,14 @@ class Mario:
         if we are loading the model then instead of instantiating a new MarioNet we will load the model in case the model has changed
         since the last time it wa
         """
-        if load_model:
-            self.net = torch.load(os.path.join(save_dir, 'model.mdl'))
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+
+        if os.path.exists(os.path.join(dir_name, 'model.mdl')):
+            self.net = torch.load(os.path.join(dir_name, 'model.mdl'))
         else:
             self.net = MarioNet(self.state_dim, self.action_dim).float()
-            torch.save(self.net, os.path.join(save_dir, 'model.mdl'))
+            torch.save(self.net, os.path.join(dir_name, 'model.mdl'))
 
         if distributed_training:
             self.net = DDP(self.net, device_ids=[0])
@@ -58,6 +61,8 @@ class Mario:
         self.burnin = 1e4  # min. experiences before training
         self.learn_every = 3  # no. of experiences between updates to Q_online
         self.sync_every = 1e4  # no. of experiences between Q_target & Q_online sync
+
+        self.load()
 
     def act(self, state):
         """
@@ -153,15 +158,20 @@ class Mario:
         self.net.target.load_state_dict(self.net.online.state_dict())
 
     def save(self):
-        # save_path = (
-        #     self.save_dir /
-        #     f"mario_net_{int(self.curr_step // self.save_every)}.chkpt"
-        # )
-        i = 0
-        save_path = os.path.join(self.save_dir, f"mario_net_{i}.chkpt")
-        while os.path.exists(save_path):
-            i += 1
-            save_path = os.path.join(self.save_dir, f"mario_net_{i}.chkpt")
+        """
+        Saves the weights of the online and target networks to a file in the checkpoints directory
+        """
+        if not os.path.exists(os.path.join(self.dir_name, "checkpoints")):
+            os.makedirs(os.path.join(self.dir_name, "checkpoints"))
+            
+        max_checkpoint = 0
+        for checkpoint in os.listdir(os.path.join(self.dir_name, "checkpoints")):
+            if checkpoint.endswith(".chkpt"):
+                i = int(checkpoint.replace("mario_net_", "").replace(".chkpt", ""))
+                if i >= max_checkpoint:
+                    max_checkpoint = i
+                
+        save_path = os.path.join(self.dir_name, "checkpoints", f"mario_net_{max_checkpoint+1}.chkpt")
 
         torch.save(
             {"online": self.net.online.state_dict(),
@@ -170,15 +180,31 @@ class Mario:
              "curr_step": self.curr_step},
             save_path)
 
-        with open(os.path.join(self.save_dir, 'steps.txt'), 'a') as f:
+        with open(os.path.join(self.dir_name, 'steps.txt'), 'a') as f:
             s = f"mario_net_{i}.chkpt steps:{self.curr_step}\n"
             f.write(s)
 
         print(f"MarioNet saved to {save_path} at step {self.curr_step}")
 
-    def load(self, load_path):
-        if not os.path.exists(load_path):
-            raise ValueError(f"{load_path} does not exist")
+    def load(self):
+        """
+        Load the weights of the online and target networks from the most recent checkpoint file in the checkpoints directory
+        """
+        if not os.path.exists(os.path.join(self.dir_name, 'checkpoints')):
+            os.makedirs(os.path.join(self.dir_name, 'checkpoints'))
+
+        max_checkpoint = 0
+        for checkpoint in os.listdir(os.path.join(self.dir_name, "checkpoints")):
+            if checkpoint.endswith(".chkpt"):
+                i = int(checkpoint.replace("mario_net_", "").replace(".chkpt", ""))
+                if i >= max_checkpoint:
+                    max_checkpoint = i
+
+        if max_checkpoint == 0:
+            print("No checkpoints found")
+            return
+                
+        load_path = os.path.join(self.dir_name, "checkpoints", f"mario_net_{max_checkpoint}.chkpt")
 
         checkpoint = torch.load(load_path)
         self.net.online.load_state_dict(checkpoint["online"])
