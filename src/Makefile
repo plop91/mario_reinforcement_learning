@@ -1,9 +1,8 @@
+all : genome_so
 
-all : neat_so
-
-neat_so: neat.cpp
-	g++ -c -fPIC neat.cpp -o neat.o
-	g++ -shared -Wl,-soname,libneat.so -o libneat.so  neat.o
+genome_so: genome.cpp
+	g++ -c -fPIC genome.cpp -o genome.o
+	g++ -shared -Wl,-soname,libgenome.so -o libgenome.so  genome.o
 
 clean:
-	rm -f neat.o libneat.so
+	rm -f genome.o libgenome.so

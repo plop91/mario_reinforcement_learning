@@ -11,15 +11,20 @@ lib = ctypes.cdll.LoadLibrary('./libneat.so')
 print(lib)
 
 
-lib.NewGenome.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
+lib.NewGenome.argtypes = [ctypes.c_char_p]
 lib.NewGenome.restype = ctypes.c_void_p
 
-lib.GenomeLoadRunTestCase.argtypes = [ctypes.c_void_p]
-lib.GenomeLoadRunTestCase.restype = ctypes.c_void_p
+lib.SetName.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+lib.SetName.restype = None
+
+lib.GetName.argtypes = [ctypes.c_void_p]
+lib.GetName.restype = ctypes.c_char_p
 
 
-g = lib.NewGenome(3, 3, 2)
-lib.GenomeLoadRunTestCase(g)
+g = lib.NewGenome("test string".encode('utf-8'))
+print(lib.GetName(g).decode('utf-8'))
+lib.SetName(g, "new string".encode('utf-8'))
+print(lib.GetName(g).decode('utf-8'))
 
 if os.path.exists('./libneat.so'):
     os.remove('./libneat.so')
