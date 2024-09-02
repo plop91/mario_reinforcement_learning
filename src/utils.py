@@ -59,6 +59,35 @@ def write_stats_on_img(frame, name, e, i, reward):
     return frame
 
 
+def write_neat_info_on_img(frame, generation, genome, fitness):
+    frame = write_on_img(frame,
+                         f"Generation:{generation}",
+                         pos=(10, 50),
+                         font=cv2.FONT_HERSHEY_TRIPLEX,
+                         font_scale=.45,
+                         color=(0, 150, 255),
+                         thickness=1,
+                         line_type=cv2.LINE_4)
+    frame = write_on_img(frame,
+                         f"Genome:{genome}",
+                         pos=(10, 70),
+                         font=cv2.FONT_HERSHEY_TRIPLEX,
+                         font_scale=.45,
+                         color=(0, 150, 255),
+                         thickness=1,
+                         line_type=cv2.LINE_4)
+    frame = write_on_img(frame,
+                         f"Fitness:{fitness}",
+                         pos=(10, 90),
+                         font=cv2.FONT_HERSHEY_TRIPLEX,
+                         font_scale=.45,
+                         color=(0, 150, 255),
+                         thickness=1,
+                         line_type=cv2.LINE_4)
+
+    return frame
+
+
 def setup_environment(args):
 
     regimes = [['1-1'], ['1-1', '1-2', '1-3', '1-4'], ['1-1', '1-2', '1-3', '1-4', '2-1', '2-3', '2-4'],

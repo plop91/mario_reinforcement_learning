@@ -1,8 +1,11 @@
 #include <iostream>
+#include <fstream>
+#include <string>
 #include <random>
 #include <tuple>
 #include <list>
 #include <cstring>
+#include <cstdlib>
 using namespace std;
 
 /*
@@ -71,6 +74,7 @@ public:
     // float bias;
     list<tuple<Node *, float, bool>> *connections; // tuple<from_node, weight>
     bool ready;
+    bool connections_disabled = false;
 
     // public:
     Node(int id, float value);
@@ -86,9 +90,23 @@ public:
     float GetValue() { return value; }
     void IsReady() { ready = true; }
     void Reset();
-    tuple<Node *, float, bool> GetConnection(int index) { return connections->front(); };
+    void Save(string *filename);
+    void Load(string *filename);
+    void LoadConnections(string *filename, Node **nodes, int numNodes);
     list<tuple<Node *, float, bool>> *GetConnections() { return connections; };
 };
+
+Node *GetNodeWithId(Node **nodes, int numNodes, int id)
+{
+    for (int i = 0; i < numNodes; i++)
+    {
+        if (nodes[i]->GetId() == id)
+        {
+            return nodes[i];
+        }
+    }
+    return NULL;
+}
 
 Node::Node(int id, float value)
 {
@@ -96,6 +114,7 @@ Node::Node(int id, float value)
     this->value = value;
     ready = false;
     connections = new list<tuple<Node *, float, bool>>();
+    connections_disabled = false;
 }
 
 Node::~Node()
@@ -156,10 +175,53 @@ void Node::Reset()
     ready = false;
 }
 
+void Node::Save(string *filename)
+{
+    ofstream MyFile(*filename);
+    MyFile << id << endl;
+    MyFile << value << endl;
+    MyFile << connections->size() << endl;
+    for (tuple<Node *, float, bool> conn : *connections)
+    {
+        MyFile << get<0>(conn)->GetId() << " " << get<1>(conn) << " " << get<2>(conn) << endl;
+    }
+    MyFile.close();
+}
+
+void Node::Load(string *filename)
+{
+    /*
+    Initial part of the load process, the second function LoadConnections will be called after this function
+    */
+    ifstream MyFile(*filename);
+    MyFile >> id;
+    MyFile >> value;
+    MyFile.close();
+}
+
+void Node::LoadConnections(string *filename, Node **nodes, int numNodes)
+{
+    ifstream MyFile(*filename);
+    MyFile >> id;
+    MyFile >> value;
+    int num_connections;
+    MyFile >> num_connections;
+    for (int i = 0; i < num_connections; i++)
+    {
+        int from_id;
+        float weight;
+        bool enabled;
+        MyFile >> from_id >> weight >> enabled;
+        Node *from_node = GetNodeWithId(nodes, numNodes, from_id);
+        connections->push_back(make_tuple(from_node, weight, enabled));
+    }
+    MyFile.close();
+}
+
 class Genome
 {
 private:
-    char *name;
+    string *name;
     float fitness;
     int numNodes;
     int numInputs;
@@ -176,29 +238,29 @@ private:
     normal_distribution<float> pos_norm_distribution;
 
 public:
-    Genome(char *name);
+    Genome(string *name);
     ~Genome();
     Genome(Genome *other);
     void InitGenome(int numInputs, int numOutputs);
-    void Load(const char *filename);
-    void Save(const char *filename);
+    void Load(string *filename);
+    void Save(string *filename);
     void Mutate();
     void Crossover(Genome *other);
     int FeedForward(float *input_image);
 
-    void SetName(char *name) { this->name = name; }
-    char *GetName() { return name; }
+    void SetName(string *name) { this->name = name; }
+    string *GetName() { return name; }
     void SetFitness(float fitness) { this->fitness = fitness; }
     float GetFitness() { return fitness; }
+    void PrintInfo();
 
     // TODO:!
-    Node *FindRandomNodeWithConnection();
+    Node *FindRandomNodeWithEnabledConnection();
 };
 
-Genome::Genome(char *name)
+Genome::Genome(string *name)
 {
-    this->name = new char[strlen(name) + 1];
-    strcpy(this->name, name);
+    this->name = new string(name->c_str());
     this->numInputs = 0;
     this->numOutputs = 0;
     this->numHidden = 0;
@@ -208,24 +270,91 @@ Genome::Genome(char *name)
 
 Genome::~Genome()
 {
-    cout << "Genome destroyed!";
+    // delete[] name;
+    // delete[] nodes;
+    // delete[] inputs;
+    // delete[] outputs;
+    // delete[] hidden;
 }
 
 Genome::Genome(Genome *other)
 {
-    this->name = new char[strlen(other->name) + 1];
-    strcpy(this->name, other->name);
+    this->name = new string(other->name->c_str());
     this->fitness = 0;
     this->numNodes = other->numNodes;
+    if (this->numNodes == 0)
+    {
+        this->numNodes = 1000;
+    }
     this->numInputs = other->numInputs;
     this->numOutputs = other->numOutputs;
     this->numHidden = other->numHidden;
+
     // TODO: need to copy nodes, bias, inputs, outputs, and hidden but preserver the connections between the new nodes
-    // this->nodes = other->nodes;
-    // this->bias = other->bias;
-    // this->inputs = other->inputs;
-    // this->outputs = other->outputs;
-    // this->hidden = other->hidden;
+    this->nodes = new Node *[numNodes];
+    for (int i = 0; i < numNodes; i++)
+    {
+        this->nodes[i] = new Node(other->nodes[i]->GetId(), other->nodes[i]->GetValue());
+    }
+    this->bias = this->nodes[0];
+    this->inputs = new Node *[numInputs];
+    for (int i = 0; i < numInputs; i++)
+    {
+        int id = other->inputs[i]->GetId();
+        for (int j = 0; j < numNodes; j++)
+        {
+            if (nodes[j]->GetId() == id)
+            {
+                this->inputs[i] = nodes[j];
+                break;
+            }
+        }
+    }
+    this->outputs = new Node *[numOutputs];
+    for (int i = 0; i < numOutputs; i++)
+    {
+        int id = other->outputs[i]->GetId();
+        for (int j = 0; j < numNodes; j++)
+        {
+            if (nodes[j]->GetId() == id)
+            {
+                this->outputs[i] = nodes[j];
+                break;
+            }
+        }
+    }
+    this->hidden = new Node *[numHidden];
+    for (int i = 0; i < numHidden; i++)
+    {
+        int id = other->hidden[i]->GetId();
+        for (int j = 0; j < numNodes; j++)
+        {
+            if (nodes[j]->GetId() == id)
+            {
+                this->hidden[i] = nodes[j];
+                break;
+            }
+        }
+    }
+
+    // Copy connections
+    // for every node in the other genome, find the corresponding node in this genome and copy the connections
+    for (int i = 0; i < numNodes; i++)
+    {
+        int current_id = nodes[i]->GetId();
+        Node *current_node = GetNodeWithId(other->nodes, numNodes, current_id);
+        // list<tuple<Node *, float, bool>> *connections = current_node->GetConnections();
+        list<tuple<Node *, float, bool>> *connections = current_node->connections;
+        for (tuple<Node *, float, bool> conn : *connections)
+        {
+            int from_id = get<0>(conn)->GetId();
+            Node *from_node = GetNodeWithId(other->nodes, numNodes, from_id);
+            float weight = get<1>(conn);
+            bool enabled = get<2>(conn);
+            this->nodes[i]->AddConnection(from_node, weight);
+        }
+    }
+
     neg_norm_distribution = normal_distribution<float>(-1.0, 1.0);
     pos_norm_distribution = normal_distribution<float>(0.0, 1.0);
 }
@@ -268,93 +397,229 @@ void Genome::InitGenome(int numInputs, int numOutputs)
     // cout << "Genome initialized!" << endl;
 }
 
-void Genome::Load(const char *filename)
+void Genome::Load(string *dir)
 {
-    numInputs = 3;
-    numHidden = 2;
-    numOutputs = 3;
-    numNodes = numInputs + numHidden + numOutputs;
-    Node *node0 = new Node(1, -INFINITY);
-    Node *node1 = new Node(2, -INFINITY);
-    Node *node2 = new Node(3, -INFINITY);
-    Node *node3 = new Node(4, -INFINITY);
-    Node *node4 = new Node(5, -INFINITY);
-    Node *node5 = new Node(6, -INFINITY);
-    Node *node6 = new Node(7, -INFINITY);
-    Node *node7 = new Node(8, -INFINITY);
 
-    nodes = new Node *[8]{node0, node1, node2, node3, node4, node5, node6, node7};
-    inputs = new Node *[3]{node0, node1, node2};
-    hidden = new Node *[2]{node3, node4};
-    outputs = new Node *[3]{node5, node6, node7};
+    ifstream MyFile(*dir + "/genome.txt");
 
-    // Connections
-    node3->AddConnection(node0, 0.5);
-    node3->AddConnection(node1, 0.25);
+    cout << "Loading genome from: " << *dir << "/genome.txt" << endl;
 
-    node4->AddConnection(node3, 2.0);
-    node4->AddConnection(node2, 1.0);
+    // first line: numInputs, numHidden, numOutputs
+    MyFile >> numInputs >> numHidden >> numOutputs;
 
-    node5->AddConnection(node3, 1.0);
+    // Note: node[0] is always the bias node
+    // second line: input node ids
+    int *input_ids = new int[numInputs];
+    for (int i = 0; i < numInputs; i++)
+    {
+        MyFile >> input_ids[i];
+    }
 
-    node6->AddConnection(node3, 0.5);
+    // third line: hidden node ids
+    int *hidden_ids = new int[numHidden];
+    for (int i = 0; i < numHidden; i++)
+    {
+        MyFile >> hidden_ids[i];
+    }
 
-    node7->AddConnection(node4, 0.1);
+    // fourth line: output node ids
+    int *output_ids = new int[numOutputs];
+    for (int i = 0; i < numOutputs; i++)
+    {
+        MyFile >> output_ids[i];
+    }
+
+    // for each node: load node
+    nodes = new Node *[numNodes];
+    nodes[0] = new Node(0, 1);
+    bias = nodes[0];
+    for (int i = 0; i < numNodes - 1; i++)
+    {
+        string *node_filename = new string(*dir + "/node" + to_string(i) + ".txt");
+        nodes[i + 1] = new Node(i, -INFINITY);
+        nodes[i + 1]->Load(node_filename);
+    }
+
+    // for each node: load connections
+    for (int i = 0; i < numNodes - 1; i++)
+    {
+        string *node_filename = new string(*dir + "/node" + to_string(i) + ".txt");
+        nodes[i + 1]->LoadConnections(node_filename, nodes, numNodes);
+    }
+
+    // set inputs, outputs, and hidden
+
+    inputs = new Node *[numInputs];
+
+    for (int i = 0; i < numInputs; i++)
+    {
+        inputs[i] = GetNodeWithId(nodes, numNodes, input_ids[i]);
+    }
+
+    outputs = new Node *[numOutputs];
+
+    for (int i = 0; i < numOutputs; i++)
+    {
+        outputs[i] = GetNodeWithId(nodes, numNodes, output_ids[i]);
+    }
+
+    hidden = new Node *[numHidden];
+
+    for (int i = 0; i < numHidden; i++)
+    {
+        hidden[i] = GetNodeWithId(nodes, numNodes, hidden_ids[i]);
+    }
 
     cout << "Genome loaded!" << endl;
 }
 
-void Genome::Save(const char *filename)
+void Genome::Save(string *dir)
 {
+    // Create file
+    ofstream MyFile(*dir + "/genome.txt");
+
+    cout << "Saving genome to: " << *dir << "/genome.txt" << endl;
+
+    // first line: numInputs, numHidden, numOutputs
+    MyFile << numInputs << " " << numHidden << " " << numOutputs << endl;
+
+    // Note: node[0] is always the bias node
+    // second line: input node ids
+    for (int i = 0; i < numInputs; i++)
+    {
+        MyFile << inputs[i]->GetId() << " ";
+    }
+    MyFile << endl;
+
+    // third line: hidden node ids
+    for (int i = 0; i < numHidden; i++)
+    {
+        MyFile << hidden[i]->GetId() << " ";
+    }
+    MyFile << endl;
+
+    // fourth line: output node ids
+    for (int i = 0; i < numOutputs; i++)
+    {
+        MyFile << outputs[i]->GetId() << " ";
+    }
+    MyFile << endl;
+
+    MyFile.close();
+
+    // for each node: save node
+    for (int i = 0; i < numNodes; i++)
+    {
+        string *node_filename = new string(*dir + "/node" + to_string(i) + ".txt");
+        nodes[i]->Save(node_filename);
+        free(node_filename);
+    }
     cout << "Genome saved!" << endl;
 }
 
-Node *Genome::FindRandomNodeWithConnection()
+Node *Genome::FindRandomNodeWithEnabledConnection()
 {
-    // cout << "Finding random node with connection" << endl;
-    int random_node_index = 0;
-    Node *random_node = nodes[random_node_index];
-    while (random_node->GetConnections()->empty())
+    if (numNodes == 0)
     {
-        random_node_index = rand() % numNodes;
-        random_node = nodes[random_node_index];
+        cout << "No nodes in genome, cannot FindRandomNodeWithEnabledConnection" << endl;
+        return NULL;
     }
-    return random_node;
+    int i = 0;
+    // possible infinite loop, need to make sure there is always at least one enabled connection in the genome
+    while (true)
+    {
+        i++;
+        if (i > 100)
+        {
+            cout << "No enabled connections in genome, cannot mutate" << endl;
+            return NULL;
+        }
+        // int random_node_index = (int)(pos_norm_distribution(generator) * numNodes);
+        int random_node_index;
+        // Node *random_node = nodes[random_node_index];
+        Node *random_node;
+        // while (random_node->GetConnections()->empty() || random_node->connections_disabled)
+        while (true)
+        {
+            // cout << "numNodes: " << numNodes << endl;
+            // random_node_index = (int)(pos_norm_distribution(generator) * numNodes);
+            random_node_index = rand() % numNodes;
+            random_node = nodes[random_node_index];
+            // list<tuple<Node *, float, bool>> *conns = random_node->GetConnections();
+            // cout << random_node->id << endl;
+            list<tuple<Node *, float, bool>> *conns = random_node->connections;
+            // cout << "node: " << random_node->GetId() << "num_connections" << conns->size() << endl;
+            if (conns->size() > 0)
+            {
+                break;
+            }
+        }
+        // check if all connections are disabled
+        bool all_connections_disabled = true;
+        // for (tuple<Node *, float, bool> conn : *random_node->GetConnections())
+        for (tuple<Node *, float, bool> conn : *random_node->connections)
+        {
+            if (get<2>(conn))
+            {
+                all_connections_disabled = false;
+                break;
+            }
+        }
+        if (all_connections_disabled)
+        {
+            random_node->connections_disabled = true;
+            continue;
+        }
+        return random_node;
+    }
 }
 
 void Genome::Mutate()
 {
-    cout << "Genome mutated!" << endl;
+    // cout << "Genome mutating" << endl;
 
-    float mutation = pos_norm_distribution(generator);
-    if (mutation < 0.5)
+    // float mutation = pos_norm_distribution(generator);
+    // if (mutation < 0.5)
+    // {
+    // mutation 1: adjust the weight of a connection
+    Node *random_node = FindRandomNodeWithEnabledConnection();
+    if (random_node == NULL)
     {
-        // mutation 1: adjust the weight of a connection
-        Node *random_node = FindRandomNodeWithConnection();
-        list<tuple<Node *, float, bool>> *connections = random_node->GetConnections();
-        int random_connection_index = rand() % connections->size();
-        // tuple<Node *, float, bool> random_connection = connections->  
+        cout << "No enabled connections in genome, cannot mutate" << endl;
+        return;
     }
-    else if (mutation < 0.6)
-    {
-        // mutation 2: add a new connection
-    }
-    else if (mutation < 0.7)
-    {
-        // mutation 3: add a new node
-    }
-    else if (mutation < 0.8)
-    {
-        // mutation 4: disable a connection
-    }
-    else if (mutation < 0.9)
-    {
-        // mutation 5: enable a connection
-    }
-    else
-    {
-        // mutation 6: change an activation function
-    }
+    list<tuple<Node *, float, bool>> *connections = random_node->GetConnections();
+    int random_connection_index = rand() % connections->size();
+    std::list<tuple<Node *, float, bool>>::iterator it = connections->begin();
+    advance(it, random_connection_index);
+    tuple<Node *, float, bool> random_connection = *it;
+    connections->erase(it);
+    Node *from_node = get<0>(random_connection);
+    float weight = get<1>(random_connection);
+    bool enabled = get<2>(random_connection);
+    weight += pos_norm_distribution(generator);
+    connections->push_back(make_tuple(from_node, weight, enabled));
+    // }
+    // else if (mutation < 0.6)
+    // {
+    //     // mutation 2: add a new connection
+    // }
+    // else if (mutation < 0.7)
+    // {
+    //     // mutation 3: add a new node
+    // }
+    // else if (mutation < 0.8)
+    // {
+    //     // mutation 4: disable a connection
+    // }
+    // else if (mutation < 0.9)
+    // {
+    //     // mutation 5: enable a connection
+    // }
+    // else
+    // {
+    //     // mutation 6: change an activation function
+    // }
 
     // if mutation < 0.5:
     //     # mutation 1: adjust the weight of a connection
@@ -397,6 +662,7 @@ void Genome::Mutate()
     //     # TODO: check that the node does not already use the activation function
     //     raise NotImplementedError
     //     pass
+    // cout << "Genome mutated!" << endl;
 }
 
 void Genome::Crossover(Genome *other)
@@ -409,14 +675,6 @@ int Genome::FeedForward(float *input_image)
     /**
      * 'Feed forward' algorithm implemented as a recursive search starting from the output nodes.
      */
-    // cout << "Initial state:" << endl;
-    // for (int i = 0; i < numNodes; i++)
-    // {
-    //     if (i < 10 || i > numNodes - 10)
-    //     {
-    //         cout << i << ":" << nodes[i]->GetValue() << endl;
-    //     }
-    // }
 
     // Set input values
     for (int i = 0; i < numInputs; i++)
@@ -424,30 +682,13 @@ int Genome::FeedForward(float *input_image)
         this->inputs[i]->SetValue(input_image[i]);
     }
 
-    // cout << "State after setting input values:" << endl;
-    // for (int i = 0; i < numNodes; i++)
-    // {
-    //     if (i < 10 || i > numNodes - 10)
-    //     {
-    //         cout << i << ":" << nodes[i]->GetValue() << endl;
-    //     }
-    // }
-
     // Run feed forward
     for (int i = 0; i < numOutputs; i++)
     {
         outputs[i]->CalculateValue();
     }
 
-    // cout << "State after feed forward:" << endl;
-    // for (int i = 0; i < numNodes; i++)
-    // {
-    //     if (i < 10 || i > numNodes - 10)
-    //     {
-    //         cout << i << ":" << nodes[i]->GetValue() << endl;
-    //     }
-    // }
-
+    // Find the output node with the highest value
     int max_index = 0;
     float max_value = -INFINITY;
     for (int i = 0; i < numOutputs; i++)
@@ -458,33 +699,25 @@ int Genome::FeedForward(float *input_image)
             max_index = i;
         }
     }
-    // cout << "Max index: " << max_index << " Max value: " << max_value << endl;
+
     return max_index;
 }
 
-// void Genome::LoadTestCase()
-// {
-//     // print initial state
-//     cout << "Initial state:" << endl;
-//     for (int i = 0; i < numNodes; i++)
-//     {
-//         cout << i << ":" << nodes[i]->GetValue() << endl;
-//     }
-//     // feed forward
-//     this->FeedForward(new float[3]{0, 1, 0.25});
-//     // print state after feed forward
-//     cout << "State after feed forward:" << endl;
-//     for (int i = 0; i < numNodes; i++)
-//     {
-//         cout << i << ":" << nodes[i]->GetValue() << endl;
-//     }
-// }
+void Genome::PrintInfo()
+{
+    cout << "Genome name: " << name << endl;
+    cout << "Genome fitness: " << fitness << endl;
+    cout << "Genome numNodes: " << numNodes << endl;
+    cout << "Genome numInputs: " << numInputs << endl;
+    cout << "Genome numOutputs: " << numOutputs << endl;
+    cout << "Genome numHidden: " << numHidden << endl;
+}
 
 extern "C"
 {
     Genome *NewGenome(char *name)
     {
-        return new Genome(name);
+        return new Genome(new string(name));
     }
     void DeleteGenome(Genome *genome)
     {
@@ -492,7 +725,7 @@ extern "C"
     }
     Genome *CopyGenome(Genome *genome)
     {
-        return genome;
+        return new Genome(genome);
     }
     void InitGenome(Genome *genome, int numInputs, int numOutputs)
     {
@@ -500,11 +733,11 @@ extern "C"
     }
     void LoadGenome(Genome *genome, char *filename)
     {
-        genome->Load(filename);
+        genome->Load(new string(filename));
     }
-    void SaveGenome(Genome *genome, const char *filename)
+    void SaveGenome(Genome *genome, char *filename)
     {
-        genome->Save(filename);
+        genome->Save(new string(filename));
     }
     void MutateGenome(Genome *genome)
     {
@@ -518,14 +751,17 @@ extern "C"
     {
         return genome->FeedForward(input_image);
     }
-
+    void PrintGenomeInfo(Genome *genome)
+    {
+        genome->PrintInfo();
+    }
     void SetName(Genome *genome, char *name)
     {
-        genome->SetName(name);
+        genome->SetName(new string(name));
     }
-    char *GetName(Genome *genome)
+    const char *GetName(Genome *genome)
     {
-        return genome->GetName();
+        return genome->GetName()->c_str();
     }
 
     void SetFitness(Genome *genome, float fitness)
@@ -537,68 +773,3 @@ extern "C"
         return genome->GetFitness();
     }
 }
-
-// int main()
-// {
-//     // genome->InitGenome();
-//     // genome->FeedForward(new float[3]{1, 2, 3});
-
-//     // EXAMPLE 1
-
-//     // vars
-//     int numInputs = 3;
-//     int numHidden = 2;
-//     int numOutputs = 3;
-//     int numNodes = numInputs + numHidden + numOutputs;
-//     Genome *genome = new Genome(numInputs, numHidden, numOutputs);
-
-//     // Nodes
-//     Node *node0 = new Node(1, 0);
-//     Node *node1 = new Node(2, 1);
-//     Node *node2 = new Node(3, 0.25);
-//     Node *node3 = new Node(4, -INFINITY);
-//     Node *node4 = new Node(5, -INFINITY);
-//     Node *node5 = new Node(6, -INFINITY);
-//     Node *node6 = new Node(7, -INFINITY);
-//     Node *node7 = new Node(8, -INFINITY);
-
-//     // Node lists
-//     Node **nodes = new Node *[8]{node0, node1, node2, node3, node4, node5, node6, node7};
-//     Node **inputs = new Node *[3]{node0, node1, node2};
-//     Node **hidden = new Node *[2]{node3, node4};
-//     Node **outputs = new Node *[3]{node5, node6, node7};
-
-//     // Connections
-//     node3->AddConnection(node0, 0.5);
-//     node3->AddConnection(node1, 0.25);
-
-//     node4->AddConnection(node3, 2.0);
-//     node4->AddConnection(node2, 1.0);
-
-//     node5->AddConnection(node3, 1.0);
-
-//     node6->AddConnection(node3, 0.5);
-
-//     node7->AddConnection(node4, 0.1);
-
-//     // Load config
-//     // genome->LoadConfig(numNodes, nodes, numInputs, inputs, numOutputs, outputs, numHidden, hidden);
-
-//     // print state before feed forward
-//     cout << "Initial state:" << endl;
-//     for (int i = 0; i < numNodes; i++)
-//     {
-//         cout << i << ":" << nodes[i]->GetValue() << endl;
-//     }
-
-//     // feed forward
-//     genome->FeedForward(new float[3]{0, 1, 0.25});
-
-//     // print state after feed forward
-//     cout << "State after feed forward:" << endl;
-//     for (int i = 0; i < numNodes; i++)
-//     {
-//         cout << i << ":" << nodes[i]->GetValue() << endl;
-//     }
-//     return 0;
-// }

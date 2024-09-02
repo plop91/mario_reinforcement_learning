@@ -18,6 +18,14 @@ class Genome:
     lib.NewGenome.argtypes = [ctypes.c_char_p]
     lib.NewGenome.restype = ctypes.c_void_p
 
+    # Delete Genome
+    lib.DeleteGenome.argtypes = [ctypes.c_void_p]
+    lib.DeleteGenome.restype = None
+
+    # Copy Genome
+    lib.CopyGenome.argtypes = [ctypes.c_void_p]
+    lib.CopyGenome.restype = ctypes.c_void_p
+
     # Init new genome
     lib.InitGenome.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
     lib.InitGenome.restype = None
@@ -58,6 +66,10 @@ class Genome:
     lib.GetFitness.argtypes = [ctypes.c_void_p]
     lib.GetFitness.restype = ctypes.c_float
 
+    # Print Genome
+    lib.PrintGenomeInfo.argtypes = [ctypes.c_void_p]
+    lib.PrintGenomeInfo.restype = None
+
     @property
     def fitness(self):
         return self.lib.GetFitness(self.genome)
@@ -68,13 +80,18 @@ class Genome:
     def __del__(self):
         self.lib.DeleteGenome(self.genome)
 
+    def copy(self):
+        g = Genome("test string")
+        g.genome = self.lib.CopyGenome(self.genome)
+        return g
+
     def new_genome(self, num_inputs, num_outputs):
         self.lib.InitGenome(self.genome, num_inputs, num_outputs)
 
-    def load_genome(self, filename):
+    def load(self, filename):
         self.lib.LoadGenome(self.genome, filename.encode('utf-8'))
 
-    def save_genome(self, filename):
+    def save(self, filename):
         self.lib.SaveGenome(self.genome, filename.encode('utf-8'))
 
     def mutate(self):
@@ -98,6 +115,9 @@ class Genome:
     def get_fitness(self):
         return self.fitness
 
+    def print_genome_info(self):
+        self.lib.PrintGenomeInfo(self.genome)
+
 
 def process_image(img):
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -105,69 +125,3 @@ def process_image(img):
     img = img.flatten()
     c_floats = (ctypes.c_float * len(img))(*img)
     return c_floats
-
-
-if __name__ == '__main__':
-    from nes_py.wrappers import JoypadSpace
-    import gym_super_mario_bros
-    from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
-    try:
-        from utils import *
-    except ImportError:
-        # add ../.. to sys.path
-        import sys
-        sys.path.append('../..')
-        from utils import *
-    import warnings
-    warnings.filterwarnings("ignore")
-
-    try:
-        gui = False
-
-        env = gym_super_mario_bros.make(
-            'SuperMarioBros-1-1-v0', render_mode='rgb_array', apply_api_compatibility=True)
-        env = JoypadSpace(env, COMPLEX_MOVEMENT)
-        env = SkipFrame(env, skip=4)
-
-        num_pop = 10
-        print(f'Creating population of {num_pop} genomes')
-        population = []
-        for i in range(num_pop):
-            g = Genome("test string")
-            g.new_genome(1024, 10)
-            population.append(g)
-
-        print('Population created - starting evolution')
-        for i in range(num_pop):
-            last_state = np.zeros((32, 32, 3), dtype=np.uint8)
-            env.reset()
-            score = 0
-            while True:
-                c_floats = process_image(last_state)
-                population[i].feed_forward(c_floats)
-                next_state, reward, done, trunc, info = env.step(
-                    env.action_space.sample())
-                if gui:
-                    cv2.imshow('SuperMario', cv2.cvtColor(next_state, cv2.COLOR_RGB2BGR))
-                    cv2.waitKey(1)
-                score += reward
-                if done or trunc:
-                    break
-                last_state = next_state
-            population[i].set_fitness(score)
-            print(f'Genome {i} fitness: {population[i].get_fitness()}')
-
-        # Sort population by fitness
-        population.sort(key=lambda x: x.fitness, reverse=True)
-
-        # print top 5 genomes
-        for i in range(5):
-            print(f'Genome {i} fitness: {population[i].get_fitness()}')
-
-    except KeyboardInterrupt:
-        pass
-    finally:
-        if os.path.exists('./libgenome.so'):
-            os.remove('./libgenome.so')
-        if os.path.exists('./genome.o'):
-            os.remove('./genome.o')
